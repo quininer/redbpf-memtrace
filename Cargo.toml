@@ -17,7 +17,7 @@ redbpf = {  version = "1.1", features = ["load"] }
 libc = "0.2"
 argh = "0.1"
 anyhow = "1"
-tokio = { version = "0.2", features = ["rt-core", "io-driver", "macros", "signal", "time", "stream"] }
+tokio = { version = "0.2", features = ["rt-core", "rt-util", "io-driver", "macros", "signal", "time", "stream"] }
 
 [patch.crates-io]
 cargo-bpf = { path = "../redbpf/cargo-bpf" }

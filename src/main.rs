@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::fs::File;
+use std::collections::hash_map::{ HashMap, Entry };
 use argh::FromArgs;
+use tokio::{ task, signal };
+use tokio::stream::StreamExt;
 use redbpf::{ StackTrace, BpfStackFrames };
 use redbpf::load::{ Loader, Loaded };
-use tokio::signal;
-use tokio::stream::StreamExt;
 use probes::malloc::*;
 
 
@@ -27,6 +28,8 @@ async fn main() -> anyhow::Result<()> {
         anyhow::bail!("You must be root to use eBPF!");
     }
 
+    let _fd = File::open(format!("/proc/{}/exe", options.pid))?;
+
     let mut loader = Loader::load(malloc_probe_code())
         .map_err(|err| anyhow::format_err!("redbpf: {:?}", err))?;
 
@@ -40,12 +43,14 @@ async fn main() -> anyhow::Result<()> {
 
     let Loaded { module, mut events } = loader;
 
-    tokio::spawn(async move {
+    let local = task::LocalSet::new();
+
+    let j = local.run_until(async move {
         let mut stacks2: HashMap<i32, BpfStackFrames> = HashMap::with_capacity(1024);
 
         let stacks = module.maps.iter()
             .find(|m| m.name == "malloc_stack")
-            .unwrap();
+            .ok_or_else(|| anyhow::format_err!("not found malloc_stack"))?;
         let mut stacks = StackTrace::new(stacks);
 
         while let Some((name, events)) = events.next().await {
@@ -60,19 +65,36 @@ async fn main() -> anyhow::Result<()> {
 
                 println!("{:?}", event);
 
-                if let Some(stack) = stacks.get(event.stackid) {
-                    println!("{:p}", stack.ip[0] as *const u8);
+                let stack = if let Some(stack) = stacks.get(event.stackid) {
+                    let stack = match stacks2.entry(event.stackid) {
+                        Entry::Occupied(mut v) => {
+                            v.insert(stack);
+                            v.into_mut()
+                        },
+                        Entry::Vacant(v) => v.insert(stack)
+                    };
 
-                    stacks2.insert(event.stackid, stack);
                     stacks.remove(event.stackid);
-                } else if let Some(stack) = stacks2.get(&event.stackid) {
-                    println!("{:p}", stack.ip[0] as *const u8);
+
+                    Some(stack as &_)
+                } else {
+                    stacks2.get(&event.stackid)
+                };
+
+                if let Some(stack) = stack {
+                    // TODO symbolize
+                    eprintln!("{:#?}", &stack.ip[..5]);
                 }
             }
         }
+
+        Ok(()) as anyhow::Result<()>
     });
 
-    signal::ctrl_c().await?;
+    tokio::select!{
+        ret = signal::ctrl_c() => ret?,
+        ret = j => ret?
+    }
 
     Ok(())
 }

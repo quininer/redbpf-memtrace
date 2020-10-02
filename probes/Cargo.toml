@@ -1,0 +1,29 @@
+[package]
+name = "probes"
+version = "0.1.0"
+edition = '2018'
+
+[dependencies]
+cty = "0.2"
+redbpf-macros = "1"
+redbpf-probes = "1"
+
+[build-dependencies]
+cargo-bpf = { version = "^1.1.0", default-features = false }
+
+[features]
+default = []
+probes = []
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "malloc"
+path = "src/malloc/main.rs"
+required-features = ["probes"]
+
+[[bin]]
+name = "sysalloc"
+path = "src/sysalloc/main.rs"
+required-features = ["probes"]

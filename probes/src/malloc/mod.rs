@@ -15,11 +15,16 @@ pub struct MemEvent {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Type {
     Malloc = 1,
     Free,
     Calloc,
     Realloc,
-    ReallocArray
+    ReallocArray,
+    PosixMemalign,
+    AlignedAlloc,
+    Valloc,
+    Memalign,
+    PvAlloc
 }

@@ -8,16 +8,16 @@ edition = "2018"
 members = [ "probes" ]
 
 [build-dependencies]
-cargo-bpf = { version = "^1.1", default-features = false, features = ["build"] }
+cargo-bpf = { version = "1.1", default-features = false, features = ["build"] }
 
 [dependencies]
 probes = { path = "probes" }
-redbpf = {  version = "^1.1", features = ["load"] }
+redbpf = {  version = "1.1", features = ["load"] }
 
 libc = "0.2"
 argh = "0.1"
 anyhow = "1"
-tokio = { version = "^0.2", features = ["rt-core", "io-driver", "macros", "signal", "time", "stream"] }
+tokio = { version = "0.2", features = ["rt-core", "io-driver", "macros", "signal", "time", "stream"] }
 
 [patch.crates-io]
 cargo-bpf = { path = "../redbpf/cargo-bpf" }

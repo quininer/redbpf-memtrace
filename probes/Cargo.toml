@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = '2018'
 
 [dependencies]
+paste = "1"
 cty = "0.2"
 redbpf-macros = "1"
 redbpf-probes = "1"

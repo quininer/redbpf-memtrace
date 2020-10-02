@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use argh::FromArgs;
-use redbpf::StackTrace;
+use redbpf::{ StackTrace, BpfStackFrames };
 use redbpf::load::{ Loader, Loaded };
 use tokio::signal;
 use tokio::stream::StreamExt;
@@ -11,7 +12,11 @@ use probes::malloc::*;
 pub struct Options {
     /// process id
     #[argh(positional)]
-    pid: i32
+    pid: libc::pid_t,
+
+    /// libc path
+    #[argh(option)]
+    libc: Option<String>
 }
 
 #[tokio::main]
@@ -25,15 +30,19 @@ async fn main() -> anyhow::Result<()> {
     let mut loader = Loader::load(malloc_probe_code())
         .map_err(|err| anyhow::format_err!("redbpf: {:?}", err))?;
 
+    let libc = options.libc.as_deref().unwrap_or("/usr/lib/libc.so.6");
     for uprobe in loader.uprobes_mut() {
-        // TODO find libc
-        uprobe.attach_uprobe(Some(&uprobe.name()), 0, "/usr/lib/libc.so.6", Some(options.pid))
+        let name = uprobe.name();
+        let name = name.trim_end_matches("_entry").trim_end_matches("_ret");
+        uprobe.attach_uprobe(Some(name), 0, libc, Some(options.pid))
             .map_err(|err| anyhow::format_err!("redbpf: {:?}", err))?;
     }
 
     let Loaded { module, mut events } = loader;
 
     tokio::spawn(async move {
+        let mut stacks2: HashMap<i32, BpfStackFrames> = HashMap::with_capacity(1024);
+
         let stacks = module.maps.iter()
             .find(|m| m.name == "malloc_stack")
             .unwrap();
@@ -49,13 +58,16 @@ async fn main() -> anyhow::Result<()> {
                 let event = event.as_ptr().cast::<MemEvent>();
                 let event = unsafe { event.read() };
 
-                let ip = stacks.get(event.stackid)
-                    .map(|stack| stack.ip[0])
-                    .unwrap_or(0);
+                println!("{:?}", event);
 
-                stacks.remove(event.stackid);
+                if let Some(stack) = stacks.get(event.stackid) {
+                    println!("{:p}", stack.ip[0] as *const u8);
 
-                println!("{:?} - {:p}", event, ip as *const u8);
+                    stacks2.insert(event.stackid, stack);
+                    stacks.remove(event.stackid);
+                } else if let Some(stack) = stacks2.get(&event.stackid) {
+                    println!("{:p}", stack.ip[0] as *const u8);
+                }
             }
         }
     });
